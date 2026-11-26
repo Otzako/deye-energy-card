@@ -15,25 +15,22 @@ const DEFAULTS = {
 
 const I18N = {
   uk: {
-    level: "Заряд батареї", capacity: "Ємність",
-    charge: "Заряд", discharge: "Розряд", idle: "Очікування",
-    chargeSub: "Іде заряд", dischargeSub: "Іде розряд", idleSub: "Без струму",
+    capacity: "Ємність",
+    idleSub: "Без струму", chargeSub: "Іде заряд", dischargeSub: "Іде розряд",
     gridOn: "Мережа є", gridOff: "Мережі немає",
     pv: "Вироблення", load: "Споживання", grid: "Мережа", bat: "Батарея",
     produced: "Зібрано сьогодні", consumed: "Витрачено сьогодні", bought: "Куплено сьогодні",
   },
   ru: {
-    level: "Заряд батареи", capacity: "Ёмкость",
-    charge: "Заряд", discharge: "Разряд", idle: "Ожидание",
-    chargeSub: "Идёт заряд", dischargeSub: "Идёт разряд", idleSub: "Без тока",
+    capacity: "Ёмкость",
+    idleSub: "Без тока", chargeSub: "Идёт заряд", dischargeSub: "Идёт разряд",
     gridOn: "Сеть есть", gridOff: "Сети нет",
     pv: "Выработка", load: "Потребление", grid: "Сеть", bat: "Батарея",
     produced: "Собрано сегодня", consumed: "Потрачено сегодня", bought: "Куплено сегодня",
   },
   en: {
-    level: "Battery level", capacity: "Capacity",
-    charge: "Charging", discharge: "Discharging", idle: "Idle",
-    chargeSub: "Charging", dischargeSub: "Discharging", idleSub: "Idle",
+    capacity: "Capacity",
+    idleSub: "Idle", chargeSub: "Charging", dischargeSub: "Discharging",
     gridOn: "Grid on", gridOff: "Grid off",
     pv: "Solar", load: "Load", grid: "Grid", bat: "Battery",
     produced: "Produced today", consumed: "Used today", bought: "Bought today",
@@ -183,7 +180,7 @@ class DeyeEnergyCard extends HTMLElement {
         <span class="muted">· ${e(extra)}</span></div>`;
     }
 
-    const tiles = [
+    const tileDefs = [
       ["pv_power", c.name_pv || L.pv, "mdi:solar-power",
         c.today_production ? `${L.produced} ${this._fmt("today_production", 1)}` : "", "", "today_production"],
       ["load_power", c.name_load || L.load, "mdi:home",
@@ -192,12 +189,25 @@ class DeyeEnergyCard extends HTMLElement {
         c.today_import ? `${L.bought} ${this._fmt("today_import", 1)}` : "", "", "today_import"],
       ["battery_power", c.name_battery || L.bat, "mdi:battery",
         c.battery_power && bp !== null ? L[mode + "Sub"] : "", modeColor, ""],
-    ].map(([key, name, icon, sub, accent, subKey]) => `
-      <div class="tile${accent ? " mode" : ""}"${accent ? ` style="--tile-accent:${accent}"` : ""}${c[key] ? ` data-entity="${e(c[key])}"` : ""}>
+    ];
+
+    const tiles = tileDefs.map((d) => {
+      const key = d[0], name = d[1], icon = d[2], sub = d[3], accent = d[4], subKey = d[5];
+      const tileEntity = c[key] ? ` data-entity="${e(c[key])}"` : "";
+      const tileStyle = accent ? ` style="--tile-accent:${accent}"` : "";
+      const subEntity = subKey && c[subKey] ? ` data-entity="${e(c[subKey])}"` : "";
+      const subHtml = sub ? `<div class="s"${subEntity}>${e(sub)}</div>` : "";
+      return `<div class="tile${accent ? " mode" : ""}"${tileStyle}${tileEntity}>
         <div class="lb"><ha-icon icon="${icon}"></ha-icon>${e(name)}</div>
         <div class="v">${this._fmt(key, 0)}</div>
-        ${sub ? `<div class="s"${subKey && c[subKey] ? ` data-entity="${e(c[subKey])}"` : ""}>${e(sub)}</div>` : ""}
-      </div>`).join("");
+        ${subHtml}
+      </div>`;
+    }).join("");
+
+    const batEntity = c.battery_soc ? ` data-entity="${e(c.battery_soc)}"` : "";
+    const capEntity = c.battery_capacity ? ` data-entity="${e(c.battery_capacity)}"` : "";
+    const capHtml = cap ? `<div class="cap"${capEntity}>${e(cap)}</div>` : "";
+    const pctText = soc === null ? "—" : Math.round(soc) + "%";
 
     const html = `
       <style>
@@ -230,11 +240,11 @@ class DeyeEnergyCard extends HTMLElement {
       </style>
       <ha-card>
         <div class="battery-row">
-          <div class="battery"${c.battery_soc ? ` data-entity="${e(c.battery_soc)}"` : ""}>
+          <div class="battery"${batEntity}>
             <div class="fill" style="width:${pct}%;background:color-mix(in srgb, ${barColor} 65%, transparent)"></div>
             <div class="inside">
-              <div class="pct">${soc === null ? "—" : Math.round(soc) + "%"}</div>
-              ${cap ? `<div class="cap"${c.battery_capacity ? ` data-entity="${e(c.battery_capacity)}"` : ""}>${e(cap)}</div>` : ""}
+              <div class="pct">${pctText}</div>
+              ${capHtml}
             </div>
           </div>
           <div class="nub"></div>
@@ -248,6 +258,7 @@ class DeyeEnergyCard extends HTMLElement {
       this._last = html;
     }
   }
+}
 
 class DeyeEnergyCardEditor extends HTMLElement {
   setConfig(config) {
