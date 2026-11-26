@@ -41,22 +41,33 @@ const I18N = {
 };
 
 const LABELS = {
-  battery_soc: "Заряд батареї, %",
-  battery_power: "Потужність батареї (мінус = заряд)",
-  battery_capacity: "Ємність батареї",
-  grid_status: "Стан мережі (binary_sensor)",
-  grid_voltage: "Напруга мережі",
-  grid_current: "Струм мережі",
-  pv_power: "Потужність панелей",
-  load_power: "Споживання",
-  grid_power: "Потужність мережі",
-  today_production: "Вироблено за день",
-  today_load: "Спожито за день",
-  today_import: "Куплено за день",
-  name_pv: "Назва плитки: панелі",
-  name_load: "Назва плитки: споживання",
-  name_grid: "Назва плитки: мережа",
-  name_battery: "Назва плитки: батарея",
+  uk: {
+    battery_soc: "Заряд батареї, %", battery_power: "Потужність батареї (мінус = заряд)",
+    battery_capacity: "Ємність батареї", grid_status: "Стан мережі (binary_sensor)",
+    grid_voltage: "Напруга мережі", grid_current: "Струм мережі",
+    pv_power: "Потужність панелей", load_power: "Споживання", grid_power: "Потужність мережі",
+    today_production: "Вироблено за день", today_load: "Спожито за день", today_import: "Куплено за день",
+    name_pv: "Назва плитки: панелі", name_load: "Назва плитки: споживання",
+    name_grid: "Назва плитки: мережа", name_battery: "Назва плитки: батарея",
+  },
+  ru: {
+    battery_soc: "Заряд батареи, %", battery_power: "Мощность батареи (минус = заряд)",
+    battery_capacity: "Ёмкость батареи", grid_status: "Состояние сети (binary_sensor)",
+    grid_voltage: "Напряжение сети", grid_current: "Ток сети",
+    pv_power: "Мощность панелей", load_power: "Потребление", grid_power: "Мощность сети",
+    today_production: "Выработано за день", today_load: "Потреблено за день", today_import: "Куплено за день",
+    name_pv: "Название плитки: панели", name_load: "Название плитки: потребление",
+    name_grid: "Название плитки: сеть", name_battery: "Название плитки: батарея",
+  },
+  en: {
+    battery_soc: "Battery level, %", battery_power: "Battery power (negative = charging)",
+    battery_capacity: "Battery capacity", grid_status: "Grid status (binary_sensor)",
+    grid_voltage: "Grid voltage", grid_current: "Grid current",
+    pv_power: "Solar power", load_power: "Load power", grid_power: "Grid power",
+    today_production: "Produced today", today_load: "Used today", today_import: "Bought today",
+    name_pv: "Tile name: solar", name_load: "Tile name: load",
+    name_grid: "Tile name: grid", name_battery: "Tile name: battery",
+  },
 };
 
 class DeyeEnergyCard extends HTMLElement {
@@ -150,18 +161,9 @@ class DeyeEnergyCard extends HTMLElement {
     const soc = this._num("battery_soc");
     const bp = this._num("battery_power");
     const mode = bp === null || Math.abs(bp) < 5 ? "idle" : bp < 0 ? "charge" : "discharge";
-    const modeColor = { charge: "#4caf50", discharge: "#ff9800", idle: "var(--secondary-text-color)" }[mode];
+    const modeColor = { charge: "#4caf50", discharge: "#ff9800", idle: "" }[mode];
     const barColor = soc === null ? "transparent" : soc >= 50 ? "#4caf50" : soc >= 20 ? "#ff9800" : "#e53935";
     const pct = soc === null ? 0 : Math.max(0, Math.min(100, soc));
-
-    let stateText = "";
-    if (c.battery_power && bp !== null) {
-      stateText = L[mode];
-      if (mode !== "idle") {
-        const unit = this._st("battery_power").attributes.unit_of_measurement;
-        stateText += " " + this._fmtNum(Math.abs(bp), unit, 0);
-      }
-    }
     const cap = c.battery_capacity ? `${L.capacity} ${this._fmt("battery_capacity", 1)}` : "";
 
     let gridRow = "";
@@ -183,53 +185,60 @@ class DeyeEnergyCard extends HTMLElement {
 
     const tiles = [
       ["pv_power", c.name_pv || L.pv, "mdi:solar-power",
-        c.today_production ? `${L.produced} ${this._fmt("today_production", 1)}` : ""],
+        c.today_production ? `${L.produced} ${this._fmt("today_production", 1)}` : "", "", "today_production"],
       ["load_power", c.name_load || L.load, "mdi:home",
-        c.today_load ? `${L.consumed} ${this._fmt("today_load", 1)}` : ""],
+        c.today_load ? `${L.consumed} ${this._fmt("today_load", 1)}` : "", "", "today_load"],
       ["grid_power", c.name_grid || L.grid, "mdi:transmission-tower",
-        c.today_import ? `${L.bought} ${this._fmt("today_import", 1)}` : ""],
+        c.today_import ? `${L.bought} ${this._fmt("today_import", 1)}` : "", "", "today_import"],
       ["battery_power", c.name_battery || L.bat, "mdi:battery",
-        c.battery_power && bp !== null ? L[mode + "Sub"] : ""],
-    ].map(([key, name, icon, sub]) => `
-      <div class="tile"${c[key] ? ` data-entity="${e(c[key])}"` : ""}>
+        c.battery_power && bp !== null ? L[mode + "Sub"] : "", modeColor, ""],
+    ].map(([key, name, icon, sub, accent, subKey]) => `
+      <div class="tile${accent ? " mode" : ""}"${accent ? ` style="--tile-accent:${accent}"` : ""}${c[key] ? ` data-entity="${e(c[key])}"` : ""}>
         <div class="lb"><ha-icon icon="${icon}"></ha-icon>${e(name)}</div>
         <div class="v">${this._fmt(key, 0)}</div>
-        ${sub ? `<div class="s">${e(sub)}</div>` : ""}
+        ${sub ? `<div class="s"${subKey && c[subKey] ? ` data-entity="${e(c[subKey])}"` : ""}>${e(sub)}</div>` : ""}
       </div>`).join("");
 
     const html = `
       <style>
         :host { display: block; }
         ha-card { padding: 14px; overflow: hidden; }
-        .top { display: flex; justify-content: space-between; align-items: flex-end; }
+        .battery-row { display: flex; align-items: center; margin-bottom: 12px; }
+        .battery { position: relative; flex: 1; min-width: 0; height: 60px; box-sizing: border-box;
+                   border: 2px solid color-mix(in srgb, var(--primary-text-color) 35%, transparent);
+                   border-radius: 12px; overflow: hidden; cursor: pointer;
+                   background: color-mix(in srgb, var(--primary-text-color) 6%, transparent); }
+        .fill { position: absolute; left: 0; top: 0; bottom: 0; }
+        .inside { position: absolute; inset: 0; display: flex; flex-direction: column;
+                  align-items: center; justify-content: center; pointer-events: none; }
+        .pct { font-size: 24px; font-weight: 500; line-height: 1.2; }
+        .cap { font-size: 12px; color: var(--secondary-text-color); pointer-events: auto; cursor: pointer; }
+        .nub { width: 5px; height: 22px; margin-left: 2px; border-radius: 0 3px 3px 0;
+               background: color-mix(in srgb, var(--primary-text-color) 35%, transparent); }
         .lb { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--secondary-text-color); }
         .lb ha-icon { --mdc-icon-size: 14px; }
-        .soc { font-size: 32px; font-weight: 500; line-height: 1.2; }
-        .right { text-align: right; font-size: 13px; }
-        .bar { height: 6px; border-radius: 3px; margin: 10px 0 12px;
-               background: color-mix(in srgb, var(--primary-text-color) 10%, transparent); }
-        .bar div { height: 100%; border-radius: 3px; }
-        .grid-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 12px; flex-wrap: wrap; }
+        .grid-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 12px; flex-wrap: wrap; cursor: pointer; }
         .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
         .muted, .s { color: var(--secondary-text-color); }
         .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
         .tile { border-radius: 8px; padding: 10px 12px; cursor: pointer;
                 background: color-mix(in srgb, var(--primary-text-color) 6%, transparent); }
+        .tile.mode { background: color-mix(in srgb, var(--tile-accent) 16%, transparent); }
+        .tile.mode .v { color: var(--tile-accent); }
         .v { font-size: 22px; font-weight: 500; line-height: 1.3; }
         .s { font-size: 12px; }
       </style>
       <ha-card>
-        <div class="top">
-          <div${c.battery_soc ? ` data-entity="${e(c.battery_soc)}"` : ""}>
-            <div class="lb">${L.level}</div>
-            <div class="soc">${soc === null ? "—" : Math.round(soc) + "%"}</div>
+        <div class="battery-row">
+          <div class="battery"${c.battery_soc ? ` data-entity="${e(c.battery_soc)}"` : ""}>
+            <div class="fill" style="width:${pct}%;background:color-mix(in srgb, ${barColor} 65%, transparent)"></div>
+            <div class="inside">
+              <div class="pct">${soc === null ? "—" : Math.round(soc) + "%"}</div>
+              ${cap ? `<div class="cap"${c.battery_capacity ? ` data-entity="${e(c.battery_capacity)}"` : ""}>${e(cap)}</div>` : ""}
+            </div>
           </div>
-          <div class="right">
-            <div style="color:${modeColor}">${e(stateText)}</div>
-            ${cap ? `<div class="s">${e(cap)}</div>` : ""}
-          </div>
+          <div class="nub"></div>
         </div>
-        <div class="bar"><div style="width:${pct}%;background:${barColor}"></div></div>
         ${gridRow}
         <div class="tiles">${tiles}</div>
       </ha-card>`;
@@ -239,7 +248,6 @@ class DeyeEnergyCard extends HTMLElement {
       this._last = html;
     }
   }
-}
 
 class DeyeEnergyCardEditor extends HTMLElement {
   setConfig(config) {
@@ -269,7 +277,10 @@ class DeyeEnergyCardEditor extends HTMLElement {
     if (!this._form) {
       this._form = document.createElement("ha-form");
       this._form.schema = this._schema();
-      this._form.computeLabel = (s) => LABELS[s.name] || s.name;
+      this._form.computeLabel = (s) => {
+        const lang = ((this._hass.locale && this._hass.locale.language) || this._hass.language || "en").slice(0, 2);
+        return (LABELS[lang] || LABELS.en)[s.name] || s.name;
+      };
       this._form.addEventListener("value-changed", (ev) => {
         const config = { ...ev.detail.value };
         this._config = config;
