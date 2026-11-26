@@ -171,8 +171,8 @@ class DeyeEnergyCard extends HTMLElement {
       const dot = !known ? "var(--secondary-text-color)" : on ? "#4caf50" : "#e53935";
       const extra = [
         this._rel(gs.last_changed),
-        c.grid_voltage ? this._fmt("grid_voltage", 0) : "",
-        c.grid_current ? this._fmt("grid_current", 2) : "",
+        on && c.grid_voltage ? this._fmt("grid_voltage", 0) : "",
+        on && c.grid_current ? this._fmt("grid_current", 2) : "",
       ].filter(Boolean).join(" · ");
       gridRow = `<div class="grid-row" data-entity="${e(c.grid_status)}">
         <span class="dot" style="background:${dot}"></span>
@@ -222,7 +222,7 @@ class DeyeEnergyCard extends HTMLElement {
         .inside { position: absolute; inset: 0; display: flex; flex-direction: column;
                   align-items: center; justify-content: center; pointer-events: none; }
         .pct { font-size: 24px; font-weight: 500; line-height: 1.2; }
-        .cap { font-size: 12px; color: var(--secondary-text-color); pointer-events: auto; cursor: pointer; }
+        .cap { font-size: 12px; font-weight: 500; color: color-mix(in srgb, var(--primary-text-color) 85%, transparent); pointer-events: auto; cursor: pointer; }
         .nub { width: 5px; height: 22px; margin-left: 2px; border-radius: 0 3px 3px 0;
                background: color-mix(in srgb, var(--primary-text-color) 35%, transparent); }
         .lb { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--secondary-text-color); }
