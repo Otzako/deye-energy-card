@@ -82,6 +82,8 @@ const LABELS = {
     today_production: "Вироблено за день", today_load: "Спожито за день", today_import: "Куплено за день",
     name_pv: "Назва плитки: панелі", name_load: "Назва плитки: споживання",
     name_grid: "Назва плитки: мережа", name_battery: "Назва плитки: батарея",
+    pv_threshold: "Вироблення: зелений колір від, W (за замовч. 5)", grid_limit: "Мережа: межа, при якій колір червоний, W",
+    load_limit: "Споживання: межа, при якій колір червоний, W",
   },
   ru: {
     battery_soc: "Заряд батареи, %", battery_power: "Мощность батареи (минус = заряд)",
@@ -91,6 +93,8 @@ const LABELS = {
     today_production: "Выработано за день", today_load: "Потреблено за день", today_import: "Куплено за день",
     name_pv: "Название плитки: панели", name_load: "Название плитки: потребление",
     name_grid: "Название плитки: сеть", name_battery: "Название плитки: батарея",
+    pv_threshold: "Выработка: зелёный цвет от, W (по умолч. 5)", grid_limit: "Сеть: предел, при котором цвет красный, W",
+    load_limit: "Потребление: предел, при котором цвет красный, W",
   },
   en: {
     battery_soc: "Battery level, %", battery_power: "Battery power (negative = charging)",
@@ -100,6 +104,8 @@ const LABELS = {
     today_production: "Produced today", today_load: "Used today", today_import: "Bought today",
     name_pv: "Tile name: solar", name_load: "Tile name: load",
     name_grid: "Tile name: grid", name_battery: "Tile name: battery",
+    pv_threshold: "Solar: green above, W (default 5)", grid_limit: "Grid: red at, W",
+    load_limit: "Load: red at, W",
   },
 };
 
@@ -192,6 +198,17 @@ class DeyeEnergyCard extends HTMLElement {
     return rtf.format(-Math.floor(sec / 86400), "day");
   }
 
+  _heat(t) {
+    const x = Math.max(0, Math.min(1, t));
+    const hue = x <= 0.5 ? 125 - 80 * (x / 0.5) : 45 - 41 * ((x - 0.5) / 0.5);
+    return `hsl(${Math.round(hue)} 65% 50%)`;
+  }
+
+  _limit(v) {
+    const n = parseFloat(v);
+    return isNaN(n) || n <= 0 ? null : n;
+  }
+
   _prefix() {
     const c = this._c || {};
     for (const key of ["pv_power", "load_power", "grid_power", "battery_power"]) {
@@ -219,8 +236,6 @@ class DeyeEnergyCard extends HTMLElement {
         const n = parseFloat(s.state);
         if (!isNaN(n) && /^-?[0-9.]+$/.test(s.state)) {
           val = this._fmtNum(n, s.attributes.unit_of_measurement, 2);
-        } else if (typeof h.formatEntityState === "function") {
-          val = h.formatEntityState(s);
         } else {
           const words = {
             charging: ["Заряджається", "Заряжается", "Charging"],
@@ -228,7 +243,9 @@ class DeyeEnergyCard extends HTMLElement {
             idle: ["Очікування", "Ожидание", "Idle"],
             static: ["Очікування", "Ожидание", "Idle"],
           };
-          val = words[s.state] ? words[s.state][idx] : s.state;
+          if (words[s.state]) val = words[s.state][idx];
+          else if (typeof h.formatEntityState === "function") val = h.formatEntityState(s);
+          else val = s.state;
         }
       }
       rows.push(`<div class="drow" data-entity="${this._esc(id)}"><span>${this._esc(DETAIL_NAMES[suffix][idx])}</span><span class="dval">${this._esc(val)}</span></div>`);
@@ -252,6 +269,23 @@ class DeyeEnergyCard extends HTMLElement {
     const pct = soc === null ? 0 : Math.max(0, Math.min(100, soc));
     const cap = c.battery_capacity ? `${L.capacity} ${this._fmt("battery_capacity", 1)}` : "";
 
+    const pvp = this._num("pv_power");
+    const pvThr = c.pv_threshold === undefined || c.pv_threshold === "" || isNaN(parseFloat(c.pv_threshold)) ? 5 : parseFloat(c.pv_threshold);
+    const pvAccent = pvp !== null && pvp > pvThr ? this._heat(0) : "";
+
+    const gp = this._num("grid_power");
+    const gridLimit = this._limit(c.grid_limit);
+    let gridAccent = "";
+    if (gp !== null) {
+      if (gp <= 50) gridAccent = this._heat(0);
+      else if (gridLimit && gridLimit > 50) gridAccent = this._heat(0.5 + 0.5 * Math.min(1, (gp - 50) / (gridLimit - 50)));
+      else gridAccent = this._heat(0.5);
+    }
+
+    const lp = this._num("load_power");
+    const loadLimit = this._limit(c.load_limit);
+    const loadAccent = lp !== null && loadLimit ? this._heat(lp / loadLimit) : "";
+
     let gridRow = "";
     const gs = this._st("grid_status");
     if (gs) {
@@ -271,11 +305,11 @@ class DeyeEnergyCard extends HTMLElement {
 
     const tileDefs = [
       ["pv_power", c.name_pv || L.pv, "mdi:solar-power",
-        c.today_production ? `${L.produced} ${this._fmt("today_production", 1)}` : "", "", "today_production", "pv"],
+        c.today_production ? `${L.produced} ${this._fmt("today_production", 1)}` : "", pvAccent, "today_production", "pv"],
       ["load_power", c.name_load || L.load, "mdi:home",
-        c.today_load ? `${L.consumed} ${this._fmt("today_load", 1)}` : "", "", "today_load", "load"],
+        c.today_load ? `${L.consumed} ${this._fmt("today_load", 1)}` : "", loadAccent, "today_load", "load"],
       ["grid_power", c.name_grid || L.grid, "mdi:transmission-tower",
-        c.today_import ? `${L.bought} ${this._fmt("today_import", 1)}` : "", "", "today_import", "grid"],
+        c.today_import ? `${L.bought} ${this._fmt("today_import", 1)}` : "", gridAccent, "today_import", "grid"],
       ["battery_power", c.name_battery || L.bat, "mdi:battery",
         c.battery_power && bp !== null ? L[mode + "Sub"] : "", modeColor, "", "battery"],
     ];
@@ -383,12 +417,14 @@ class DeyeEnergyCardEditor extends HTMLElement {
   _schema() {
     const ent = (name, domain) => ({ name, selector: { entity: { domain } } });
     const txt = (name) => ({ name, selector: { text: {} } });
+    const num = (name) => ({ name, selector: { number: { min: 0, mode: "box", unit_of_measurement: "W" } } });
     return [
       ent("battery_soc", "sensor"), ent("battery_power", "sensor"), ent("battery_capacity", "sensor"),
       ent("grid_status", "binary_sensor"), ent("grid_voltage", "sensor"), ent("grid_current", "sensor"),
       ent("pv_power", "sensor"), ent("load_power", "sensor"), ent("grid_power", "sensor"),
       ent("today_production", "sensor"), ent("today_load", "sensor"), ent("today_import", "sensor"),
       txt("name_pv"), txt("name_load"), txt("name_grid"), txt("name_battery"),
+      num("pv_threshold"), num("grid_limit"), num("load_limit"),
     ];
   }
 
