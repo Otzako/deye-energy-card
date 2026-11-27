@@ -201,7 +201,7 @@ class DeyeEnergyCard extends HTMLElement {
   _heat(t) {
     const x = Math.max(0, Math.min(1, t));
     const hue = x <= 0.5 ? 125 - 80 * (x / 0.5) : 45 - 41 * ((x - 0.5) / 0.5);
-    return `hsl(${Math.round(hue)} 65% 50%)`;
+    return this._dark ? `hsl(${Math.round(hue)} 50% 68%)` : `hsl(${Math.round(hue)} 65% 50%)`;
   }
 
   _limit(v) {
@@ -258,13 +258,16 @@ class DeyeEnergyCard extends HTMLElement {
     const h = this._hass;
     const c = this._c;
     this._loc = (h.locale && h.locale.language) || h.language || "en";
+    this._dark = !!(h.themes && h.themes.darkMode);
     const L = I18N[this._loc.slice(0, 2)] || I18N.en;
     const e = (s) => this._esc(s);
 
     const soc = this._num("battery_soc");
     const bp = this._num("battery_power");
     const mode = bp === null || Math.abs(bp) < 5 ? "idle" : bp < 0 ? "charge" : "discharge";
-    const modeColor = { charge: "#4caf50", discharge: "#ff9800", idle: "" }[mode];
+    const modeColor = this._dark
+      ? { charge: "hsl(125 50% 68%)", discharge: "hsl(36 70% 68%)", idle: "" }[mode]
+      : { charge: "#4caf50", discharge: "#ff9800", idle: "" }[mode];
     const barColor = soc === null ? "transparent" : soc >= 50 ? "#4caf50" : soc >= 20 ? "#ff9800" : "#e53935";
     const pct = soc === null ? 0 : Math.max(0, Math.min(100, soc));
     const cap = c.battery_capacity ? `${L.capacity} ${this._fmt("battery_capacity", 1)}` : "";
