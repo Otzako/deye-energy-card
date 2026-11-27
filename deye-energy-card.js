@@ -19,22 +19,58 @@ const I18N = {
     idleSub: "Без струму", chargeSub: "Іде заряд", dischargeSub: "Іде розряд",
     gridOn: "Мережа є", gridOff: "Мережі немає",
     pv: "Вироблення", load: "Споживання", grid: "Мережа", bat: "Батарея",
-    produced: "Зібрано сьогодні", consumed: "Витрачено сьогодні", bought: "Куплено сьогодні",
+    produced: "Зібрано", consumed: "Витрачено", bought: "Куплено",
   },
   ru: {
     capacity: "Ёмкость",
     idleSub: "Без тока", chargeSub: "Идёт заряд", dischargeSub: "Идёт разряд",
     gridOn: "Сеть есть", gridOff: "Сети нет",
     pv: "Выработка", load: "Потребление", grid: "Сеть", bat: "Батарея",
-    produced: "Собрано сегодня", consumed: "Потрачено сегодня", bought: "Куплено сегодня",
+    produced: "Собрано", consumed: "Потрачено", bought: "Куплено",
   },
   en: {
     capacity: "Capacity",
     idleSub: "Idle", chargeSub: "Charging", dischargeSub: "Discharging",
     gridOn: "Grid on", gridOff: "Grid off",
     pv: "Solar", load: "Load", grid: "Grid", bat: "Battery",
-    produced: "Produced today", consumed: "Used today", bought: "Bought today",
+    produced: "Produced", consumed: "Used", bought: "Bought",
   },
+};
+
+const DETAILS = {
+  pv: ["pv1_power", "pv1_voltage", "pv1_current", "pv2_power", "pv2_voltage", "pv2_current", "total_production"],
+  load: ["load_l1_voltage", "load_l1_current", "load_frequency", "total_load_consumption"],
+  grid: ["grid_l1_voltage", "grid_l1_current", "grid_frequency", "today_energy_export", "total_energy_import", "total_energy_export"],
+  battery: ["battery_state", "battery_voltage", "battery_current", "battery_temperature",
+    "today_battery_charge", "today_battery_discharge", "total_battery_charge", "total_battery_discharge"],
+};
+
+const DETAIL_NAMES = {
+  pv1_power: ["PV1 потужність", "PV1 мощность", "PV1 power"],
+  pv1_voltage: ["PV1 напруга", "PV1 напряжение", "PV1 voltage"],
+  pv1_current: ["PV1 струм", "PV1 ток", "PV1 current"],
+  pv2_power: ["PV2 потужність", "PV2 мощность", "PV2 power"],
+  pv2_voltage: ["PV2 напруга", "PV2 напряжение", "PV2 voltage"],
+  pv2_current: ["PV2 струм", "PV2 ток", "PV2 current"],
+  total_production: ["Всього вироблено", "Всего выработано", "Total produced"],
+  load_l1_voltage: ["Напруга", "Напряжение", "Voltage"],
+  load_l1_current: ["Струм", "Ток", "Current"],
+  load_frequency: ["Частота", "Частота", "Frequency"],
+  total_load_consumption: ["Всього спожито", "Всего потреблено", "Total used"],
+  grid_l1_voltage: ["Напруга", "Напряжение", "Voltage"],
+  grid_l1_current: ["Струм", "Ток", "Current"],
+  grid_frequency: ["Частота", "Частота", "Frequency"],
+  today_energy_export: ["Віддано сьогодні", "Отдано сегодня", "Exported today"],
+  total_energy_import: ["Всього куплено", "Всего куплено", "Total bought"],
+  total_energy_export: ["Всього віддано", "Всего отдано", "Total exported"],
+  battery_state: ["Стан", "Состояние", "State"],
+  battery_voltage: ["Напруга", "Напряжение", "Voltage"],
+  battery_current: ["Струм", "Ток", "Current"],
+  battery_temperature: ["Температура", "Температура", "Temperature"],
+  today_battery_charge: ["Заряд за день", "Заряд за день", "Charged today"],
+  today_battery_discharge: ["Розряд за день", "Разряд за день", "Discharged today"],
+  total_battery_charge: ["Всього заряджено", "Всего заряжено", "Total charged"],
+  total_battery_discharge: ["Всього розряджено", "Всего разряжено", "Total discharged"],
 };
 
 const LABELS = {
@@ -71,7 +107,16 @@ class DeyeEnergyCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
+    this._open = null;
     this.shadowRoot.addEventListener("click", (ev) => {
+      const tg = ev.target.closest("[data-toggle]");
+      if (tg) {
+        const k = tg.dataset.toggle;
+        this._open = this._open === k ? null : k;
+        this._last = null;
+        this._render();
+        return;
+      }
       const t = ev.target.closest("[data-entity]");
       if (!t) return;
       this.dispatchEvent(new CustomEvent("hass-more-info", {
@@ -147,6 +192,50 @@ class DeyeEnergyCard extends HTMLElement {
     return rtf.format(-Math.floor(sec / 86400), "day");
   }
 
+  _prefix() {
+    const c = this._c || {};
+    for (const key of ["pv_power", "load_power", "grid_power", "battery_power"]) {
+      const id = c[key];
+      if (!id || id.indexOf(".") < 0) continue;
+      const name = id.slice(id.indexOf(".") + 1);
+      if (name.endsWith(key)) return name.slice(0, name.length - key.length);
+    }
+    return null;
+  }
+
+  _detailRows(node) {
+    const prefix = this._prefix();
+    if (prefix === null) return "";
+    const h = this._hass;
+    const lang = ["uk", "ru", "en"].indexOf(this._loc.slice(0, 2));
+    const idx = lang < 0 ? 2 : lang;
+    const rows = [];
+    for (const suffix of DETAILS[node]) {
+      const id = `sensor.${prefix}${suffix}`;
+      const s = h.states[id];
+      if (!s) continue;
+      let val = "—";
+      if (s.state !== "unavailable" && s.state !== "unknown") {
+        const n = parseFloat(s.state);
+        if (!isNaN(n) && /^-?[0-9.]+$/.test(s.state)) {
+          val = this._fmtNum(n, s.attributes.unit_of_measurement, 2);
+        } else if (typeof h.formatEntityState === "function") {
+          val = h.formatEntityState(s);
+        } else {
+          const words = {
+            charging: ["Заряджається", "Заряжается", "Charging"],
+            discharging: ["Розряджається", "Разряжается", "Discharging"],
+            idle: ["Очікування", "Ожидание", "Idle"],
+            static: ["Очікування", "Ожидание", "Idle"],
+          };
+          val = words[s.state] ? words[s.state][idx] : s.state;
+        }
+      }
+      rows.push(`<div class="drow" data-entity="${this._esc(id)}"><span>${this._esc(DETAIL_NAMES[suffix][idx])}</span><span class="dval">${this._esc(val)}</span></div>`);
+    }
+    return rows.length ? `<div class="details">${rows.join("")}</div>` : "";
+  }
+
   _render() {
     if (!this._c || !this._hass) return;
     const h = this._hass;
@@ -182,27 +271,36 @@ class DeyeEnergyCard extends HTMLElement {
 
     const tileDefs = [
       ["pv_power", c.name_pv || L.pv, "mdi:solar-power",
-        c.today_production ? `${L.produced} ${this._fmt("today_production", 1)}` : "", "", "today_production"],
+        c.today_production ? `${L.produced} ${this._fmt("today_production", 1)}` : "", "", "today_production", "pv"],
       ["load_power", c.name_load || L.load, "mdi:home",
-        c.today_load ? `${L.consumed} ${this._fmt("today_load", 1)}` : "", "", "today_load"],
+        c.today_load ? `${L.consumed} ${this._fmt("today_load", 1)}` : "", "", "today_load", "load"],
       ["grid_power", c.name_grid || L.grid, "mdi:transmission-tower",
-        c.today_import ? `${L.bought} ${this._fmt("today_import", 1)}` : "", "", "today_import"],
+        c.today_import ? `${L.bought} ${this._fmt("today_import", 1)}` : "", "", "today_import", "grid"],
       ["battery_power", c.name_battery || L.bat, "mdi:battery",
-        c.battery_power && bp !== null ? L[mode + "Sub"] : "", modeColor, ""],
+        c.battery_power && bp !== null ? L[mode + "Sub"] : "", modeColor, "", "battery"],
     ];
 
-    const tiles = tileDefs.map((d) => {
-      const key = d[0], name = d[1], icon = d[2], sub = d[3], accent = d[4], subKey = d[5];
+    const parts = [];
+    tileDefs.forEach((d, i) => {
+      const key = d[0], name = d[1], icon = d[2], sub = d[3], accent = d[4], subKey = d[5], node = d[6];
+      const isOpen = this._open === node;
       const tileEntity = c[key] ? ` data-entity="${e(c[key])}"` : "";
       const tileStyle = accent ? ` style="--tile-accent:${accent}"` : "";
       const subEntity = subKey && c[subKey] ? ` data-entity="${e(c[subKey])}"` : "";
       const subHtml = sub ? `<div class="s"${subEntity}>${e(sub)}</div>` : "";
-      return `<div class="tile${accent ? " mode" : ""}"${tileStyle}${tileEntity}>
-        <div class="lb"><ha-icon icon="${icon}"></ha-icon>${e(name)}</div>
+      parts.push(`<div class="tile${accent ? " mode" : ""}${isOpen ? " open" : ""}"${tileStyle}${tileEntity}>
+        <div class="lb"><ha-icon icon="${icon}"></ha-icon><span class="nm">${e(name)}</span>
+          <button class="tg" data-toggle="${node}" aria-label="${e(name)}" aria-expanded="${isOpen}"><ha-icon icon="${isOpen ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon></button></div>
         <div class="v">${this._fmt(key, 0)}</div>
         ${subHtml}
-      </div>`;
-    }).join("");
+      </div>`);
+      const rowEnd = i % 2 === 1;
+      if (rowEnd) {
+        const openNode = [tileDefs[i - 1][6], d[6]].find((n) => n === this._open);
+        if (openNode) parts.push(this._detailRows(openNode));
+      }
+    });
+    const tiles = parts.join("");
 
     const batEntity = c.battery_soc ? ` data-entity="${e(c.battery_soc)}"` : "";
     const capEntity = c.battery_capacity ? ` data-entity="${e(c.battery_capacity)}"` : "";
@@ -237,6 +335,17 @@ class DeyeEnergyCard extends HTMLElement {
         .tile.mode .v { color: var(--tile-accent); }
         .v { font-size: 22px; font-weight: 500; line-height: 1.3; }
         .s { font-size: 12px; }
+        .nm { flex: 1; min-width: 0; }
+        .tg { all: unset; cursor: pointer; display: flex; align-items: center; padding: 2px; border-radius: 50%;
+              color: var(--secondary-text-color); }
+        .tg:hover { background: color-mix(in srgb, var(--primary-text-color) 10%, transparent); }
+        .tg ha-icon { --mdc-icon-size: 20px; }
+        .tile.open { outline: 1px solid color-mix(in srgb, var(--primary-text-color) 25%, transparent); }
+        .details { grid-column: 1 / -1; border-radius: 8px; padding: 4px 12px;
+                   background: color-mix(in srgb, var(--primary-text-color) 4%, transparent); }
+        .drow { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; font-size: 13px; cursor: pointer; }
+        .drow + .drow { border-top: 1px solid color-mix(in srgb, var(--primary-text-color) 8%, transparent); }
+        .dval { font-weight: 500; text-align: right; }
       </style>
       <ha-card>
         <div class="battery-row">
